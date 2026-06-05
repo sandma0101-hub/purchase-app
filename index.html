@@ -32,9 +32,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .nav-tab .icon{font-size:18px;line-height:1}
 .nav-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .nav-tab:active{background:var(--bg3)}
-/* sections */
-.sec{display:none;padding:16px 14px 80px;max-width:720px;margin:0 auto}
-.sec.active{display:block}
+/* swipe container */
+.sec-wrapper{display:flex;width:300%;transition:transform .3s cubic-bezier(.4,0,.2,1);will-change:transform}
+.sec{display:block !important;width:33.333%;flex-shrink:0;padding:16px 14px 80px;max-width:none}
 .sec-title{font-size:17px;font-weight:700;margin-bottom:16px;letter-spacing:-.01em}
 /* cards */
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
@@ -153,8 +153,11 @@ table.dt tr:last-child td{border-bottom:none}
   <button class="nav-tab" onclick="sw('products')"><span class="icon">📦</span>商品マスタ</button>
 </div>
 
+<div style="overflow:hidden;width:100%">
+<div class="sec-wrapper" id="sec-wrapper">
+
 <!-- 仕入れ入力 -->
-<div id="sec-order" class="sec active">
+<div id="sec-order" class="sec">
   <div class="sec-title">仕入れ入力</div>
   <div class="card">
     <div class="rf"><label class="lbl">📅 日付</label><input type="date" id="o-date" style="width:170px"></div>
@@ -265,6 +268,8 @@ table.dt tr:last-child td{border-bottom:none}
     </div>
   </div>
 </div>
+</div><!-- /sec-wrapper -->
+</div><!-- /overflow hidden -->
 
 <script>
 // ── Supabase config ──
@@ -326,12 +331,16 @@ async function loadAll(){
     setSyncStatus('ok','同期済み · '+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));
   }catch(e){setSyncStatus('err','接続エラー: '+e.message);}}
 
-// ── Tab switch ──
+// ── Tab switch with slide animation ──
+const TABS=['order','monthly','products'];
+let curTabIdx=0;
 function sw(n){
-  const tabs=['order','monthly','products'];
-  document.querySelectorAll('.nav-tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===n));
-  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
-  document.getElementById('sec-'+n).classList.add('active');
+  const idx=TABS.indexOf(n);if(idx<0)return;
+  curTabIdx=idx;
+  document.querySelectorAll('.nav-tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  const w=document.getElementById('sec-wrapper');
+  w.style.transition='transform .3s cubic-bezier(.4,0,.2,1)';
+  w.style.transform=`translateX(-${idx*33.333}%)`;
   if(n==='order')renderProdSelectList();
   else if(n==='monthly'){renderCalMonLbl();renderCalendar();renderMonthDetail();}
   else if(n==='products'){editingProdId=null;renderProducts();}
@@ -662,17 +671,31 @@ function dl(content,filename){const a=document.createElement('a');a.href='data:t
 
 // ── Swipe navigation ──
 (()=>{
-  let sx=0,sy=0;
-  const tabs=['order','monthly','products'];
-  function curIdx(){return tabs.findIndex(t=>document.getElementById('sec-'+t).classList.contains('active'));}
-  document.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{passive:true});
+  let sx=0,sy=0,dragging=false,startIdx=0;
+  const wrapper=()=>document.getElementById('sec-wrapper');
+  document.addEventListener('touchstart',e=>{
+    sx=e.touches[0].clientX;sy=e.touches[0].clientY;
+    dragging=true;startIdx=curTabIdx;
+    wrapper().style.transition='none';
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!dragging)return;
+    const dx=e.touches[0].clientX-sx;
+    const dy=e.touches[0].clientY-sy;
+    if(Math.abs(dy)>Math.abs(dx)*1.5){dragging=false;wrapper().style.transition='';return;}
+    const pct=(-startIdx*33.333)+(dx/window.innerWidth*33.333);
+    const clamped=Math.max(-66.666,Math.min(0,pct));
+    wrapper().style.transform=`translateX(${clamped}%)`;
+  },{passive:true});
   document.addEventListener('touchend',e=>{
+    if(!dragging)return;dragging=false;
     const dx=e.changedTouches[0].clientX-sx;
     const dy=e.changedTouches[0].clientY-sy;
-    if(Math.abs(dx)<50||Math.abs(dx)<Math.abs(dy)*1.5)return;
-    const i=curIdx();
-    if(dx<0&&i<tabs.length-1)sw(tabs[i+1]);
-    else if(dx>0&&i>0)sw(tabs[i-1]);
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5){
+      if(dx<0&&startIdx<TABS.length-1)sw(TABS[startIdx+1]);
+      else if(dx>0&&startIdx>0)sw(TABS[startIdx-1]);
+      else sw(TABS[startIdx]);
+    }else{sw(TABS[startIdx]);}
   },{passive:true});
 })();
 async function init(){
