@@ -6,6 +6,19 @@
 <link rel="icon" type="image/png" href="icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
+/* ── Login screen ── */
+.login-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;padding:24px}
+.login-box{width:100%;max-width:380px;background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:28px 24px}
+.login-logo{text-align:center;font-size:48px;margin-bottom:8px}
+.login-title{text-align:center;font-size:20px;font-weight:700;margin-bottom:4px;color:var(--text)}
+.login-sub{text-align:center;font-size:12px;color:var(--text3);margin-bottom:24px}
+.login-tab{display:flex;background:var(--bg3);border-radius:var(--radius-sm);padding:3px;margin-bottom:20px}
+.login-tab-btn{flex:1;padding:8px;font-size:13px;border:none;background:none;color:var(--text3);border-radius:6px;cursor:pointer;font-family:var(--sans);font-weight:500;transition:background .15s,color .15s}
+.login-tab-btn.active{background:var(--bg4);color:var(--text)}
+.login-err{font-size:12px;color:var(--red);text-align:center;margin-top:10px;min-height:18px}
+.login-note{font-size:11px;color:var(--text3);text-align:center;margin-top:14px;line-height:1.7}
+</style>
+<style>
 :root{
   --bg:#0d0f14;--bg2:#13161e;--bg3:#1c2030;--bg4:#252a38;
   --border:#2a2f42;--border2:#363d56;
@@ -141,10 +154,29 @@ table.dt tr:last-child td{border-bottom:none}
 @media(max-width:400px){.r3{grid-template-columns:1fr 1fr}.sel-stats{grid-template-columns:repeat(3,1fr)}}
 </style>
 
+<!-- ログイン画面 -->
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">📦</div>
+    <div class="login-title">仕入れ管理アプリ</div>
+    <div class="login-sub">Amazon物販 仕入れ管理</div>
+    <div class="login-tab">
+      <button class="login-tab-btn active" id="tab-login-btn" onclick="switchAuthTab('login')">ログイン</button>
+      <button class="login-tab-btn" id="tab-signup-btn" onclick="switchAuthTab('signup')">新規登録</button>
+    </div>
+    <div class="rf"><label class="lbl">メールアドレス</label><input type="text" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
+    <div class="rf"><label class="lbl">パスワード</label><input type="text" id="auth-pass" placeholder="6文字以上" autocomplete="current-password" style="-webkit-text-security:disc;text-security:disc"></div>
+    <button class="btn-primary" id="auth-btn" onclick="doAuth()" style="width:100%">ログイン</button>
+    <div class="login-err" id="auth-err"></div>
+    <div class="login-note" id="auth-note">アカウントをお持ちでない方は「新規登録」へ</div>
+  </div>
+</div>
+
 <!-- sync status bar -->
 <div class="sync-bar">
   <div class="sync-dot" id="sync-dot"></div>
   <span id="sync-msg">接続中...</span>
+  <button id="logout-btn" onclick="doLogout()" style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:4px;display:none">ログアウト</button>
 </div>
 
 <div class="app-nav">
@@ -275,20 +307,82 @@ table.dt tr:last-child td{border-bottom:none}
 // ── Supabase config ──
 const SB_URL='https://hyjpbqmhybouqjkvjugy.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5anBicW1oeWJvdXFqa3ZqdWd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NDExMDYsImV4cCI6MjA5NjIxNzEwNn0.VSvj_Vm1JC67GLqcuPZ4gWU7II29lepTvasorG0OvbE';
-const H={'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
+let accessToken=SB_KEY,currentUserId=null;
+
+function getH(){return{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+accessToken};}
 
 async function sbGet(table,params=''){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{headers:{...H,'Prefer':'return=representation'}});
+  const r=await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{headers:{...getH(),'Prefer':'return=representation'}});
   if(!r.ok)throw new Error(await r.text());return r.json();}
 async function sbInsert(table,data){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:{...H,'Prefer':'return=representation'},body:JSON.stringify(data)});
+  const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(data)});
   if(!r.ok)throw new Error(await r.text());return r.json();}
 async function sbUpdate(table,id,data){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{method:'PATCH',headers:{...H,'Prefer':'return=representation'},body:JSON.stringify(data)});
+  const r=await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{method:'PATCH',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(data)});
   if(!r.ok)throw new Error(await r.text());return r.json();}
 async function sbDelete(table,id){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{method:'DELETE',headers:H});
+  const r=await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{method:'DELETE',headers:getH()});
   if(!r.ok)throw new Error(await r.text());}
+
+// ── Auth ──
+let authMode='login';
+function switchAuthTab(mode){
+  authMode=mode;
+  document.getElementById('tab-login-btn').classList.toggle('active',mode==='login');
+  document.getElementById('tab-signup-btn').classList.toggle('active',mode==='signup');
+  document.getElementById('auth-btn').textContent=mode==='login'?'ログイン':'新規登録';
+  document.getElementById('auth-note').textContent=mode==='login'?'アカウントをお持ちでない方は「新規登録」へ':'すでにアカウントをお持ちの方は「ログイン」へ';
+  document.getElementById('auth-err').textContent='';}
+
+async function doAuth(){
+  const email=document.getElementById('auth-email').value.trim();
+  const pass=document.getElementById('auth-pass').value;
+  const err=document.getElementById('auth-err');
+  if(!email||!pass){err.textContent='メールアドレスとパスワードを入力してください';return;}
+  const btn=document.getElementById('auth-btn');btn.disabled=true;btn.textContent='処理中...';err.textContent='';
+  try{
+    const endpoint=authMode==='login'?'token?grant_type=password':'signup';
+    const body=authMode==='login'?{email,password:pass}:{email,password:pass};
+    const r=await fetch(`${SB_URL}/auth/v1/${endpoint}`,{method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},body:JSON.stringify(body)});
+    const data=await r.json();
+    if(!r.ok){err.textContent=data.error_description||data.msg||'エラーが発生しました';btn.disabled=false;btn.textContent=authMode==='login'?'ログイン':'新規登録';return;}
+    if(authMode==='signup'&&!data.access_token){err.textContent='確認メールを送信しました。メールのリンクをクリックして登録を完了してください。';err.style.color='var(--green)';btn.disabled=false;btn.textContent='新規登録';return;}
+    accessToken=data.access_token;currentUserId=data.user.id;
+    localStorage.setItem('sb_token',data.access_token);
+    localStorage.setItem('sb_refresh',data.refresh_token);
+    showApp();
+  }catch(e){err.textContent='通信エラー: '+e.message;btn.disabled=false;btn.textContent=authMode==='login'?'ログイン':'新規登録';}}
+
+async function tryAutoLogin(){
+  const token=localStorage.getItem('sb_token');
+  const refresh=localStorage.getItem('sb_refresh');
+  if(!token||!refresh)return false;
+  try{
+    const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},body:JSON.stringify({refresh_token:refresh})});
+    if(!r.ok){localStorage.removeItem('sb_token');localStorage.removeItem('sb_refresh');return false;}
+    const data=await r.json();
+    accessToken=data.access_token;currentUserId=data.user.id;
+    localStorage.setItem('sb_token',data.access_token);
+    localStorage.setItem('sb_refresh',data.refresh_token);
+    return true;
+  }catch(e){return false;}}
+
+async function doLogout(){
+  if(!confirm('ログアウトしますか？'))return;
+  await fetch(`${SB_URL}/auth/v1/logout`,{method:'POST',headers:{...getH()}}).catch(()=>{});
+  accessToken=SB_KEY;currentUserId=null;
+  localStorage.removeItem('sb_token');localStorage.removeItem('sb_refresh');
+  products=[];orders=[];
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('logout-btn').style.display='none';
+  document.getElementById('auth-email').value='';document.getElementById('auth-pass').value='';
+  document.getElementById('auth-err').textContent='';document.getElementById('auth-err').style.color='var(--red)';
+  switchAuthTab('login');}
+
+function showApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('logout-btn').style.display='block';
+  init();}
 
 // ── State ──
 let products=[],orders=[],selProdId=null,curImgData=null;
@@ -373,7 +467,7 @@ async function addProduct(){
   const memo=document.getElementById('p-memo').value.trim();
   setSyncStatus('loading','保存中...');
   try{
-    const row={id:Date.now(),name,asin,cost,profit,ship,memo,has_img:!!curImgData,img_data:curImgData||null};
+    const row={id:Date.now(),name,asin,cost,profit,ship,memo,has_img:!!curImgData,img_data:curImgData||null,user_id:currentUserId};
     const[saved]=await sbInsert('products',row);
     products.push(saved);
     document.getElementById('pn').value='';document.getElementById('p-asin').value='';
@@ -420,7 +514,7 @@ function importCSV(){
     const cols=line.split(/\t|,/).map(c=>c.trim().replace(/^["']|["']$/g,''));
     if(idx===0&&isNaN(parseInt(cols[1])))return;
     const name=cols[0];if(!name){skip++;return;}
-    toAdd.push({id:Date.now()+added+Math.floor(Math.random()*10000),name,asin:'',cost:parseInt(cols[1])||0,profit:parseInt(cols[2])||0,ship:parseInt(cols[3])||0,memo:cols[4]||'',has_img:false,img_data:null});added++;});
+    toAdd.push({id:Date.now()+added+Math.floor(Math.random()*10000),name,asin:'',cost:parseInt(cols[1])||0,profit:parseInt(cols[2])||0,ship:parseInt(cols[3])||0,memo:cols[4]||'',has_img:false,img_data:null,user_id:currentUserId});added++;});
   if(!toAdd.length){alert('登録できる行がありませんでした');return;}
   setSyncStatus('loading','一括登録中...');
   sbInsert('products',toAdd).then(saved=>{
@@ -546,7 +640,7 @@ async function addOrder(){
       const upd={qty:ex.qty+qty,cost_total:(ex.cost_total||0)+costT,profit_total:(ex.profit_total||0)+profitT,ship_total:(ex.ship_total||0)+shipT,memo:memo?(ex.memo?ex.memo+' / ':'')+memo:ex.memo};
       await sbUpdate('orders',ex.id,upd);Object.assign(ex,upd);
     }else{
-      const row={id:Date.now(),product_id:selProdId,date:dateVal,qty,cost_total:costT,profit_total:profitT,ship_total:shipT,memo};
+      const row={id:Date.now(),product_id:selProdId,date:dateVal,qty,cost_total:costT,profit_total:profitT,ship_total:shipT,memo,user_id:currentUserId};
       const[saved]=await sbInsert('orders',row);orders.push(saved);
     }
     setSyncStatus('ok','登録完了');
@@ -705,5 +799,11 @@ async function init(){
   renderProdSelectList();
   renderCalendar();
 }
-init();
+
+// ── Startup ──
+(async()=>{
+  const loggedIn=await tryAutoLogin();
+  if(loggedIn){showApp();}
+  else{document.getElementById('login-screen').style.display='flex';}
+})();
 </script>
