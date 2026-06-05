@@ -330,17 +330,7 @@ table.dt tr:last-child td{border-bottom:none}
       <span style="font-size:13px;font-weight:700;color:var(--text2)">登録済み <span id="prod-count" style="color:var(--text)">0</span> 件</span>
       <button class="btn-ghost" style="font-size:12px;padding:7px 12px" onclick="exportProdsCSV()">CSVエクスポート</button>
     </div>
-    <div class="tbl-wrap">
-      <table class="dt">
-        <thead><tr>
-          <th>画像</th><th>商品名</th><th>ASIN</th>
-          <th style="text-align:right">仕入れ</th><th style="text-align:right">利益</th>
-          <th style="text-align:right">送料</th><th style="text-align:right">純利益</th>
-          <th style="text-align:right">利率</th><th>備考</th><th style="text-align:right">操作</th>
-        </tr></thead>
-        <tbody id="prod-tbody"></tbody>
-      </table>
-    </div>
+    <div id="prod-list"></div>
   </div>
 </div>
 </div><!-- /sec-wrapper -->
@@ -621,41 +611,43 @@ function exportProdsCSV(){
 
 // ── Render products ──
 async function renderProducts(){
-  const tb=document.getElementById('prod-tbody');
+  const list=document.getElementById('prod-list');
   document.getElementById('prod-count').textContent=products.length;
-  if(!products.length){tb.innerHTML='<tr><td colspan="10" class="empty">商品が登録されていません</td></tr>';return;}
+  if(!products.length){list.innerHTML='<div class="empty">商品が登録されていません</div>';return;}
   const rows=products.map(p=>{
     if(p.id===editingProdId)return buildEditProdRow(p);
     const rate=calcRate(p.profit,p.cost,p.ship);
-    const imgHtml=p.has_img&&p.img_data?`<img src="${p.img_data}" alt="${esc(p.name)}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`:`<div style="width:48px;height:48px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📦</div>`;
-    const asinLink=p.asin?`<a href="https://www.amazon.co.jp/dp/${esc(p.asin)}" target="_blank" style="font-family:var(--mono);font-size:10px;color:var(--text3)">${esc(p.asin)}</a>`:'';
-    return`<tr><td colspan="10" style="padding:0;border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:12px;padding:12px">
-        <div style="flex-shrink:0">${imgHtml}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:14px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div>
-          ${asinLink?`<div style="margin-bottom:4px">${asinLink}</div>`:''}
-          <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text3)">
-            <span>仕入 <b style="color:var(--text)">${p.cost.toLocaleString()}円</b></span>
-            <span>利益 <b style="color:var(--green)">${p.profit.toLocaleString()}円</b></span>
-            <span>送料 <b style="color:var(--text)">${p.ship.toLocaleString()}円</b></span>
-            <span>${rateBadge(rate)}</span>
-          </div>
-          ${p.memo?`<div style="font-size:11px;color:var(--text3);margin-top:3px">📝 ${esc(p.memo)}</div>`:''}
+    const imgHtml=p.has_img&&p.img_data
+      ?`<img src="${p.img_data}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0">`
+      :`<div style="width:52px;height:52px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">📦</div>`;
+    const asinLink=p.asin?`<a href="https://www.amazon.co.jp/dp/${esc(p.asin)}" target="_blank" style="font-family:var(--mono);font-size:10px;color:var(--text3);display:block;margin-bottom:3px">${esc(p.asin)}</a>`:'';
+    return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+      ${imgHtml}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:14px;margin-bottom:2px;word-break:break-all">${esc(p.name)}</div>
+        ${asinLink}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text3);margin-bottom:2px">
+          <span>仕入 <b style="color:var(--text)">${p.cost.toLocaleString()}</b></span>
+          <span>利益 <b style="color:var(--green)">${p.profit.toLocaleString()}</b></span>
+          <span>送料 <b style="color:var(--text)">${p.ship.toLocaleString()}</b></span>
+          <span>${rateBadge(rate)}</span>
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-          <button class="op-btn" onclick="startEditProd(${p.id})" style="font-size:16px">✏️</button>
-          <button class="op-btn danger" onclick="delProduct(${p.id})" style="font-size:16px">🗑</button>
-        </div>
+        ${p.memo?`<div style="font-size:11px;color:var(--text3)">📝 ${esc(p.memo)}</div>`:''}
       </div>
-    </td></tr>`;});
-  tb.innerHTML=rows.join('');}
+      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+        <button class="op-btn" onclick="startEditProd(${p.id})">✏️</button>
+        <button class="op-btn danger" onclick="delProduct(${p.id})">🗑</button>
+      </div>
+    </div>`;});
+  list.innerHTML=rows.join('');}
+
+function startEditProd_old(){}
 
 function buildEditProdRow(p){
   editImgData=null;editImgChanged=false;
-  const imgContent=p.has_img&&p.img_data?`<img src="${p.img_data}" alt="">`:'<span style="font-size:18px">🖼</span>';
-  return`<tr class="edit-row-prod"><td colspan="10">
-    <div style="display:flex;gap:12px;align-items:flex-start">
+  const imgContent=p.has_img&&p.img_data?`<img src="${p.img_data}" alt="" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;border-radius:inherit">`:'<span style="font-size:18px">🖼</span>';
+  return`<div style="background:var(--bg3);border-radius:var(--radius);padding:14px;margin-bottom:8px;border:1px solid var(--border2)">
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">
       <div style="flex-shrink:0">
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700">画像</div>
         <div class="edit-img-zone" id="edit-img-zone" onclick="document.getElementById('edit-img-inp').click()">${imgContent}<div class="overlay">✏️</div></div>
@@ -663,10 +655,8 @@ function buildEditProdRow(p){
         <button class="btn-ghost" onclick="clearEditImg()" style="margin-top:5px;font-size:10px;padding:2px 5px">✕</button>
       </div>
       <div style="flex:1;min-width:0">
-        <div style="display:grid;grid-template-columns:1fr 130px;gap:8px;margin-bottom:8px">
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700">商品名</div><input type="text" id="edit-pname" value="${esc(p.name)}"></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700">ASIN</div><input type="text" id="edit-asin" value="${esc(p.asin||'')}" style="font-family:var(--mono)"></div>
-        </div>
+        <div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700">商品名</div><input type="text" id="edit-pname" value="${esc(p.name)}"></div>
+        <div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700">ASIN</div><input type="text" id="edit-asin" value="${esc(p.asin||'')}" style="font-family:var(--mono)"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
           <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700">仕入れ値</div><input type="number" id="edit-cost" value="${p.cost}"></div>
           <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700">利益額</div><input type="number" id="edit-profit" value="${p.profit}"></div>
@@ -675,12 +665,13 @@ function buildEditProdRow(p){
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700">備考</div><textarea class="memo-ta" id="edit-pmemo">${esc(p.memo||'')}</textarea></div>
       </div>
     </div>
-    <div class="edit-acts">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn-ghost" onclick="cancelEditProd()">キャンセル</button>
       <button class="btn-primary" onclick="saveEditProd(${p.id})">保存</button>
     </div>
-  </td></tr>`;}
+  </div>`;}
 
+function startEditProd_old(){}
 // ── Product select list ──
 function renderProdSelectList(){
   selProdId=null;document.getElementById('sel-detail').style.display='none';
