@@ -627,23 +627,28 @@ async function renderProducts(){
   const rows=products.map(p=>{
     if(p.id===editingProdId)return buildEditProdRow(p);
     const rate=calcRate(p.profit,p.cost,p.ship);
-    const imgHtml=p.has_img&&p.img_data?`<div class="img-thumb-lg"><img src="${p.img_data}" alt="${esc(p.name)}"></div>`:'<div class="img-thumb-lg">📦</div>';
-    const asinLink=p.asin?`<a href="https://www.amazon.co.jp/dp/${esc(p.asin)}" target="_blank" style="font-family:var(--mono);font-size:10px;color:var(--text3)">${esc(p.asin)}</a>`:'<span style="color:var(--text3);font-size:11px">—</span>';
-    return`<tr>
-      <td>${imgHtml}</td>
-      <td style="white-space:normal;word-break:break-all;min-width:100px;font-weight:500">${esc(p.name)}</td>
-      <td>${asinLink}</td>
-      <td style="text-align:right">${p.cost.toLocaleString()}円</td>
-      <td style="text-align:right">${p.profit.toLocaleString()}円</td>
-      <td style="text-align:right">${p.ship.toLocaleString()}円</td>
-      <td style="text-align:right"><span class="tag ${p.profit>=0?'tg':'tr-tag'}">${p.profit.toLocaleString()}円</span></td>
-      <td style="text-align:right">${rateBadge(rate)}</td>
-      <td style="max-width:140px">${memoChip(p.memo)}</td>
-      <td style="text-align:right;white-space:nowrap">
-        <button class="op-btn" onclick="startEditProd(${p.id})">✏️</button>
-        <button class="op-btn danger" onclick="delProduct(${p.id})">🗑</button>
-      </td>
-    </tr>`;});
+    const imgHtml=p.has_img&&p.img_data?`<img src="${p.img_data}" alt="${esc(p.name)}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`:`<div style="width:48px;height:48px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📦</div>`;
+    const asinLink=p.asin?`<a href="https://www.amazon.co.jp/dp/${esc(p.asin)}" target="_blank" style="font-family:var(--mono);font-size:10px;color:var(--text3)">${esc(p.asin)}</a>`:'';
+    return`<tr><td colspan="10" style="padding:0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px">
+        <div style="flex-shrink:0">${imgHtml}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div>
+          ${asinLink?`<div style="margin-bottom:4px">${asinLink}</div>`:''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text3)">
+            <span>仕入 <b style="color:var(--text)">${p.cost.toLocaleString()}円</b></span>
+            <span>利益 <b style="color:var(--green)">${p.profit.toLocaleString()}円</b></span>
+            <span>送料 <b style="color:var(--text)">${p.ship.toLocaleString()}円</b></span>
+            <span>${rateBadge(rate)}</span>
+          </div>
+          ${p.memo?`<div style="font-size:11px;color:var(--text3);margin-top:3px">📝 ${esc(p.memo)}</div>`:''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+          <button class="op-btn" onclick="startEditProd(${p.id})" style="font-size:16px">✏️</button>
+          <button class="op-btn danger" onclick="delProduct(${p.id})" style="font-size:16px">🗑</button>
+        </div>
+      </div>
+    </td></tr>`;});
   tb.innerHTML=rows.join('');}
 
 function buildEditProdRow(p){
