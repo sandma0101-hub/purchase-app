@@ -597,11 +597,12 @@ function importCSV(){
   const raw=document.getElementById('csv-area').value.trim();if(!raw){alert('CSVを貼り付けてください');return;}
   const lines=raw.split(/\r?\n/).filter(l=>l.trim());let added=0,skip=0;
   const toAdd=[];
+  const baseTime=Date.now();
   lines.forEach((line,idx)=>{
     const cols=line.split(/\t|,/).map(c=>c.trim().replace(/^["']|["']$/g,''));
     if(idx===0&&isNaN(parseInt(cols[1])))return;
     const name=cols[0];if(!name){skip++;return;}
-    toAdd.push({id:Date.now()+added+Math.floor(Math.random()*10000),name,asin:'',cost:parseInt(cols[1])||0,profit:parseInt(cols[2])||0,ship:parseInt(cols[3])||0,memo:cols[4]||'',has_img:false,img_data:null,user_id:currentUserId});added++;});
+    toAdd.push({id:baseTime+added,name,asin:'',cost:parseInt(cols[1])||0,profit:parseInt(cols[2])||0,ship:parseInt(cols[3])||0,memo:cols[4]||'',has_img:false,img_data:null,user_id:currentUserId});added++;});
   if(!toAdd.length){alert('登録できる行がありませんでした');return;}
   setSyncStatus('loading','一括登録中...');
   sbInsert('products',toAdd).then(saved=>{
