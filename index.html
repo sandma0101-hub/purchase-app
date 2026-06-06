@@ -619,7 +619,8 @@ async function renderProducts(){
       ?`<img src="${p.img_data}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0">`
       :`<div style="width:52px;height:52px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">📦</div>`;
     const asinLink=p.asin?`<a href="https://www.amazon.co.jp/dp/${esc(p.asin)}" target="_blank" style="font-family:var(--mono);font-size:10px;color:var(--text3);display:block;margin-bottom:3px">${esc(p.asin)}</a>`:'';
-    return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+    return`<div class="prod-card" data-id="${p.id}" style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)">
+      <div class="drag-handle" style="color:var(--text3);font-size:20px;cursor:grab;padding:6px 2px;flex-shrink:0;touch-action:none;user-select:none">⠿</div>
       ${imgHtml}
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:14px;margin-bottom:2px;word-break:break-all">${esc(p.name)}</div>
@@ -637,7 +638,55 @@ async function renderProducts(){
         <button class="op-btn danger" onclick="delProduct(${p.id})">🗑</button>
       </div>
     </div>`;});
-  list.innerHTML=rows.join('');}
+  list.innerHTML=rows.join('');
+  initDragSort(list);}
+
+function initDragSort(list){
+  let dragging=null,clone=null,fromIdx=0;
+  list.querySelectorAll('.drag-handle').forEach(handle=>{
+    const onStart=e=>{
+      const card=handle.closest('.prod-card');
+      const cards=[...list.querySelectorAll('.prod-card')];
+      fromIdx=cards.indexOf(card);
+      dragging=card;
+      const r=card.getBoundingClientRect();
+      // クローンを作成してドラッグ中の見た目に使う
+      clone=card.cloneNode(true);
+      clone.style.cssText=`position:fixed;top:${r.top}px;left:${r.left}px;width:${r.width}px;opacity:.85;z-index:9999;pointer-events:none;background:var(--bg2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:12px 0`;
+      document.body.appendChild(clone);
+      card.style.opacity='0.3';
+      e.preventDefault();};
+    const onMove=e=>{
+      if(!dragging||!clone)return;
+      const clientY=e.touches?e.touches[0].clientY:e.clientY;
+      clone.style.top=(clientY-40)+'px';
+      // どのカードの上にいるか判定
+      const cards=[...list.querySelectorAll('.prod-card')];
+      for(const c of cards){
+        if(c===dragging)continue;
+        const r=c.getBoundingClientRect();
+        if(clientY<r.top+r.height/2){list.insertBefore(dragging,c);break;}
+        else if(c===cards[cards.length-1]){list.appendChild(dragging);}
+      }};
+    const onEnd=()=>{
+      if(!dragging)return;
+      dragging.style.opacity='';
+      clone.remove();clone=null;
+      // 新しい順に products を並び替えて仕入れ入力にも反映
+      const newOrder=[...list.querySelectorAll('.prod-card')].map(c=>parseInt(c.dataset.id));
+      products.sort((a,b)=>newOrder.indexOf(a.id)-newOrder.indexOf(b.id));
+      dragging=null;
+      setSyncStatus('ok','並び順を変更しました');
+      renderProdSelectList();};
+    handle.addEventListener('touchstart',onStart,{passive:false});
+    handle.addEventListener('touchmove',onMove,{passive:true});
+    handle.addEventListener('touchend',onEnd,{passive:true});
+    handle.addEventListener('mousedown',e=>{
+      onStart(e);
+      const mm=e2=>onMove(e2);
+      const mu=()=>{onEnd();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+      document.addEventListener('mousemove',mm);
+      document.addEventListener('mouseup',mu);});});}
 
 
 function startEditProd(id){editingProdId=id;renderProducts();}
