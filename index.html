@@ -244,9 +244,11 @@ table.dt tr:last-child td{border-bottom:none}
         <div id="sel-img" class="thumb" style="width:48px;height:48px;flex-shrink:0;font-size:20px">📦</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:15px;margin-bottom:8px" id="sel-name"></div>
-          <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px">
             <label class="lbl" style="margin:0;white-space:nowrap">個数</label>
-            <input type="number" id="o-qty" value="1" min="1" style="width:80px">
+            <button onclick="changeQty(-1)" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">－</button>
+            <input type="number" id="o-qty" value="1" min="1" style="width:60px;text-align:center;font-size:18px;font-weight:700">
+            <button onclick="changeQty(1)" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">＋</button>
           </div>
         </div>
       </div>
@@ -269,19 +271,8 @@ table.dt tr:last-child td{border-bottom:none}
   <div class="cal-grid" id="cal-grid"></div>
   <div class="card" style="padding:12px 16px">
     <div class="detail-hdr"><span id="cal-detail-hdr">月全体の仕入れ詳細</span></div>
-    <div class="tbl-wrap">
-      <table class="dt">
-        <thead><tr>
-          <th>日</th><th></th><th>商品名</th>
-          <th style="text-align:right">個数</th><th style="text-align:right">仕入れ</th>
-          <th style="text-align:right">利益</th><th style="text-align:right">送料</th>
-          <th style="text-align:right">純利益</th><th style="text-align:right">利率</th>
-          <th>備考</th><th style="text-align:right">操作</th>
-        </tr></thead>
-        <tbody id="mon-detail-tbody"></tbody>
-        <tfoot id="mon-detail-tfoot"></tfoot>
-      </table>
-    </div>
+    <div id="mon-detail-list"></div>
+    <div id="mon-detail-footer"></div>
   </div>
 </div>
 
@@ -605,7 +596,12 @@ function exportProdsCSV(){
   if(!products.length){alert('商品が登録されていません');return;}
   const bom='\uFEFF',hdr='商品名,ASIN,仕入れ値,利益額,送料,純利益(1個),粗利益率,備考\n';
   const rows=products.map(p=>{const rate=calcRate(p.profit,p.cost,p.ship);return`"${p.name}","${p.asin||''}",${p.cost},${p.profit},${p.ship},${p.profit},${rate!==null?rate+'%':''},"${p.memo||''}"`;}).join('\n');
-  dl(bom+hdr+rows,'商品マスタ.csv');}
+  dl(bom+hdr+rows,'商品マスタ.csv');
+  // 画像データがある場合はJSONも出力
+  const withImg=products.filter(p=>p.has_img&&p.img_data);
+  if(withImg.length){
+    const json=JSON.stringify(withImg.map(p=>({id:p.id,name:p.name,img_data:p.img_data})),null,2);
+    const a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(json);a.download='商品画像データ.json';a.click();}}
 
 // ── Render products ──
 async function renderProducts(){
@@ -846,48 +842,56 @@ async function renderMonthDetail(){
   if(calSelDay)dos=dos.filter(o=>o.date===calSelDay);
   dos=dos.sort((a,b)=>a.date.localeCompare(b.date));
   document.getElementById('cal-detail-hdr').textContent=calSelDay?`${dispDate(calSelDay)}の仕入れ詳細`:'月全体の仕入れ詳細';
-  const tb=document.getElementById('mon-detail-tbody'),tf=document.getElementById('mon-detail-tfoot');
-  if(!dos.length){tb.innerHTML='<tr><td colspan="11" class="empty">仕入れデータがありません</td></tr>';tf.innerHTML='';return;}
+  const list=document.getElementById('mon-detail-list'),footer=document.getElementById('mon-detail-footer');
+  if(!dos.length){list.innerHTML='<div class="empty">仕入れデータがありません</div>';footer.innerHTML='';return;}
   let tC=0,tPr=0,tSh=0,tN=0,tQ=0;
   const rows=dos.map(o=>{
     const p=products.find(x=>x.id===o.product_id);if(!p)return'';
     const t=getOrderTotals(o);tC+=t.c;tPr+=t.pr;tSh+=t.sh;tN+=t.n;tQ+=o.qty;
     const[,mm,dd]=o.date.split('-');
-    const imgH=p.has_img&&p.img_data?`<div class="thumb"><img src="${p.img_data}" alt=""></div>`:'<div class="thumb">📦</div>';
+    const imgH=p.has_img&&p.img_data?`<img src="${p.img_data}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0">`:`<div style="width:36px;height:36px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📦</div>`;
     if(o.id===editingMonOrderId){
-      return`<tr class="edit-row">
-        <td style="color:var(--text3)">${mm}/${dd}</td><td>${imgH}</td>
-        <td style="white-space:normal;min-width:70px;font-weight:500">${esc(p.name)}</td>
-        <td><input type="number" id="mo-qty" value="${o.qty}" min="1" style="width:55px"></td>
-        <td><input type="number" id="mo-cost" value="${t.c}" oninput="recalcMonRate()" style="width:72px"></td>
-        <td><input type="number" id="mo-profit" value="${t.pr}" oninput="recalcMonNet()" style="width:72px"></td>
-        <td><input type="number" id="mo-ship" value="${t.sh}" oninput="recalcMonRate()" style="width:72px"></td>
-        <td><span id="mo-net-disp" style="font-size:12px;font-weight:700;${t.n>=0?'color:var(--green)':'color:var(--red)'}">${t.n.toLocaleString()}円</span><div class="net-auto">= 利益計</div></td>
-        <td id="mo-rate-disp">${rateBadge(t.rate)}</td>
-        <td style="min-width:110px"><textarea class="memo-ta" id="mo-memo" style="min-height:32px;font-size:11px">${esc(o.memo||'')}</textarea></td>
-        <td style="white-space:nowrap;vertical-align:middle">
-          <button class="op-btn" onclick="saveEditMonOrder(${o.id})" style="color:var(--accent)">保存</button>
-          <button class="op-btn" onclick="cancelEditMonOrder()">✕</button>
-        </td>
-      </tr>`;}
-    return`<tr>
-      <td style="color:var(--text3)">${mm}/${dd}</td><td>${imgH}</td>
-      <td style="white-space:normal;min-width:70px;font-weight:500">${esc(p.name)}</td>
-      <td style="text-align:right">${o.qty}個</td>
-      <td style="text-align:right">${t.c.toLocaleString()}</td><td style="text-align:right">${t.pr.toLocaleString()}</td>
-      <td style="text-align:right">${t.sh.toLocaleString()}</td>
-      <td style="text-align:right" class="${t.n>=0?'pp':'pn'}">${t.n.toLocaleString()}</td>
-      <td style="text-align:right">${rateBadge(t.rate)}</td>
-      <td style="max-width:140px">${memoChip(o.memo)}</td>
-      <td style="text-align:right;white-space:nowrap">
+      return`<div style="background:var(--bg3);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;border:1px solid var(--border2)">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-weight:700">${mm}/${dd} · ${esc(p.name)}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">個数</div><input type="number" id="mo-qty" value="${o.qty}" min="1"></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">仕入れ計</div><input type="number" id="mo-cost" value="${t.c}" oninput="recalcMonRate()"></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">利益計</div><input type="number" id="mo-profit" value="${t.pr}" oninput="recalcMonNet()"></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">送料計</div><input type="number" id="mo-ship" value="${t.sh}" oninput="recalcMonRate()"></div>
+        </div>
+        <div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">備考</div><textarea class="memo-ta" id="mo-memo" style="min-height:32px;font-size:12px">${esc(o.memo||'')}</textarea></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn-ghost" onclick="cancelEditMonOrder()">キャンセル</button>
+          <button class="btn-primary" onclick="saveEditMonOrder(${o.id})">保存</button>
+        </div>
+      </div>`;}
+    return`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--text3);flex-shrink:0;width:28px;text-align:center">${mm}/${dd}</div>
+      ${imgH}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text3)">
+          <span>${o.qty}個</span>
+          <span>仕入 <b style="color:var(--text)">${t.c.toLocaleString()}</b></span>
+          <span>純利益 <b class="${t.n>=0?'pp':'pn'}">${t.n.toLocaleString()}</b></span>
+          <span>${rateBadge(t.rate)}</span>
+        </div>
+        ${o.memo?`<div style="font-size:10px;color:var(--text3);margin-top:2px">📝 ${esc(o.memo)}</div>`:''}
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
         <button class="op-btn" onclick="startEditMonOrder(${o.id})">✏️</button>
         <button class="op-btn danger" onclick="delOrderMon(${o.id})">🗑</button>
-      </td>
-    </tr>`;});
-  tb.innerHTML=rows.join('');
+      </div>
+    </div>`;});
+  list.innerHTML=rows.join('');
   const totRate=calcRate(tN,tC,tSh);
-  tf.innerHTML=`<tr class="tfoot-row"><td></td><td></td><td>合計</td><td style="text-align:right">${tQ}個</td><td style="text-align:right">${tC.toLocaleString()}</td><td style="text-align:right">${tPr.toLocaleString()}</td><td style="text-align:right">${tSh.toLocaleString()}</td><td style="text-align:right" class="${tN>=0?'pp':'pn'}">${tN.toLocaleString()}</td><td>${rateBadge(totRate)}</td><td></td><td></td></tr>`;}
-
+  footer.innerHTML=`<div style="background:var(--bg3);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
+    <span style="color:var(--text3)">合計 <b style="color:var(--text)">${tQ}個</b></span>
+    <span style="color:var(--text3)">仕入 <b style="color:var(--text)">${tC.toLocaleString()}</b></span>
+    <span style="color:var(--text3)">利益 <b style="color:var(--text)">${tPr.toLocaleString()}</b></span>
+    <span style="color:var(--text3)">純利益 <b class="${tN>=0?'pp':'pn'}">${tN.toLocaleString()}</b></span>
+    <span>${rateBadge(totRate)}</span>
+  </div>`;}
 function exportMonthCSV(){
   const prefix=`${calY}-${String(calM).padStart(2,'0')}`;
   const dos=orders.filter(o=>o.date.startsWith(prefix)).sort((a,b)=>a.date.localeCompare(b.date));
@@ -897,6 +901,11 @@ function exportMonthCSV(){
   dl(bom+hdr+rows,`仕入れ記録_${calY}${String(calM).padStart(2,'0')}.csv`);}
 
 function dl(content,filename){const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(content);a.download=filename;a.click();}
+
+function changeQty(delta){
+  const el=document.getElementById('o-qty');
+  const v=Math.max(1,(parseInt(el.value)||1)+delta);
+  el.value=v;updateSelStats();}
 
 // ── Swipe navigation ──
 (()=>{
