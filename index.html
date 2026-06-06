@@ -579,8 +579,6 @@ async function delProduct(id){
     setSyncStatus('ok','削除完了');renderProducts();
   }catch(e){setSyncStatus('err','削除失敗: '+e.message);}}
 
-function startEditProd(id){editingProdId=id;renderProducts();}
-function cancelEditProd(){editingProdId=null;renderProducts();}
 function clearEditImg(){editImgData=null;editImgChanged=true;const z=document.getElementById('edit-img-zone');if(!z)return;const img=z.querySelector('img');if(img)img.remove();z.innerHTML='<span style="font-size:18px">🖼</span><div class="overlay">✏️</div>';}
 
 function importCSV(){
@@ -621,7 +619,8 @@ async function renderProducts(){
       ?`<img src="${p.img_data}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0">`
       :`<div style="width:52px;height:52px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">📦</div>`;
     const asinLink=p.asin?`<a href="https://www.amazon.co.jp/dp/${esc(p.asin)}" target="_blank" style="font-family:var(--mono);font-size:10px;color:var(--text3);display:block;margin-bottom:3px">${esc(p.asin)}</a>`:'';
-    return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+    return`<div class="prod-card" data-id="${p.id}" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+      <div class="drag-handle" style="color:var(--text3);font-size:18px;cursor:grab;padding:4px;flex-shrink:0;touch-action:none">⠿</div>
       ${imgHtml}
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:14px;margin-bottom:2px;word-break:break-all">${esc(p.name)}</div>
@@ -639,11 +638,94 @@ async function renderProducts(){
         <button class="op-btn danger" onclick="delProduct(${p.id})">🗑</button>
       </div>
     </div>`;});
-  list.innerHTML=rows.join('');}
+  list.innerHTML=rows.join('');
+  setupProdDragSort();}
 
-function startEditProd_old(){}
+function setupProdDragSort(){
+  const list=document.getElementById('prod-list');
+  let dragEl=null,placeholder=null,startY=0,offsetY=0;
 
-function buildEditProdRow(p){
+  list.querySelectorAll('.drag-handle').forEach(handle=>{
+    // タッチ
+    handle.addEventListener('touchstart',e=>{
+      e.stopPropagation();
+      const card=handle.closest('.prod-card');
+      dragEl=card;
+      const rect=card.getBoundingClientRect();
+      offsetY=e.touches[0].clientY-rect.top;
+      startY=e.touches[0].clientY;
+      // プレースホルダー作成
+      placeholder=document.createElement('div');
+      placeholder.style.cssText=`height:${card.offsetHeight}px;background:var(--bg3);border-radius:8px;border:2px dashed var(--border2);margin:0`;
+      card.parentNode.insertBefore(placeholder,card.nextSibling);
+      card.style.cssText+=`;position:fixed;width:${card.offsetWidth}px;top:${rect.top}px;left:${rect.left}px;z-index:999;opacity:.9;box-shadow:0 8px 24px rgba(0,0,0,.4);background:var(--bg2);border-radius:8px;padding:12px`;
+    },{passive:true});
+
+    handle.addEventListener('touchmove',e=>{
+      if(!dragEl)return;
+      const y=e.touches[0].clientY;
+      dragEl.style.top=(parseFloat(dragEl.style.top)+(y-startY))+'px';
+      startY=y;
+      // 入れ替え先を探す
+      const cards=[...list.querySelectorAll('.prod-card:not([style*="position:fixed"])')];
+      const ph=placeholder;
+      for(const c of cards){
+        const r=c.getBoundingClientRect();
+        if(y<r.top+r.height/2){list.insertBefore(ph,c);break;}
+        else if(c===cards[cards.length-1]){list.appendChild(ph);}
+      }
+    },{passive:true});
+
+    handle.addEventListener('touchend',()=>{
+      if(!dragEl)return;
+      dragEl.style.cssText=dragEl.style.cssText.replace(/position:fixed;.*?padding:12px/,'');
+      list.insertBefore(dragEl,placeholder);
+      placeholder.remove();
+      // 新しい順序を保存
+      const newOrder=[...list.querySelectorAll('.prod-card')].map(c=>parseInt(c.dataset.id));
+      products.sort((a,b)=>newOrder.indexOf(a.id)-newOrder.indexOf(b.id));
+      saveProductOrder();
+      dragEl=null;placeholder=null;
+    },{passive:true});
+
+    // PC用
+    handle.addEventListener('mousedown',e=>{
+      const card=handle.closest('.prod-card');
+      dragEl=card;
+      const rect=card.getBoundingClientRect();
+      offsetY=e.clientY-rect.top;
+      placeholder=document.createElement('div');
+      placeholder.style.cssText=`height:${card.offsetHeight}px;background:var(--bg3);border-radius:8px;border:2px dashed var(--border2)`;
+      card.parentNode.insertBefore(placeholder,card.nextSibling);
+      card.style.cssText+=`;position:fixed;width:${card.offsetWidth}px;top:${rect.top}px;left:${rect.left}px;z-index:999;opacity:.9;box-shadow:0 8px 24px rgba(0,0,0,.4);background:var(--bg2);border-radius:8px;padding:12px`;
+      const onMove=e2=>{
+        dragEl.style.top=(e2.clientY-offsetY)+'px';
+        const cards=[...list.querySelectorAll('.prod-card:not([style*="position:fixed"])')];
+        for(const c of cards){
+          const r=c.getBoundingClientRect();
+          if(e2.clientY<r.top+r.height/2){list.insertBefore(placeholder,c);break;}
+          else if(c===cards[cards.length-1]){list.appendChild(placeholder);}
+        }};
+      const onUp=()=>{
+        document.removeEventListener('mousemove',onMove);
+        document.removeEventListener('mouseup',onUp);
+        dragEl.style.cssText=dragEl.style.cssText.replace(/position:fixed;.*?padding:12px/,'');
+        list.insertBefore(dragEl,placeholder);
+        placeholder.remove();
+        const newOrder=[...list.querySelectorAll('.prod-card')].map(c=>parseInt(c.dataset.id));
+        products.sort((a,b)=>newOrder.indexOf(a.id)-newOrder.indexOf(b.id));
+        saveProductOrder();
+        dragEl=null;placeholder=null;};
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
+    });
+  });}
+
+async function saveProductOrder(){
+  setSyncStatus('ok','並び順を保存しました');showBadge();renderProdSelectList();}
+
+function startEditProd(id){editingProdId=id;renderProducts();}
+function cancelEditProd(){editingProdId=null;renderProducts();}
   editImgData=null;editImgChanged=false;
   const imgContent=p.has_img&&p.img_data?`<img src="${p.img_data}" alt="" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;border-radius:inherit">`:'<span style="font-size:18px">🖼</span>';
   return`<div style="background:var(--bg3);border-radius:var(--radius);padding:14px;margin-bottom:8px;border:1px solid var(--border2)">
@@ -671,8 +753,7 @@ function buildEditProdRow(p){
     </div>
   </div>`;}
 
-function startEditProd_old(){}
-// ── Product select list ──
+function buildEditProdRow(p){
 function renderProdSelectList(){
   selProdId=null;document.getElementById('sel-detail').style.display='none';
   const el=document.getElementById('prod-select-list');
