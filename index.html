@@ -774,11 +774,18 @@ async function addOrder(){
       const row={id:Date.now(),product_id:selProdId,date:dateVal,qty,cost_total:costT,profit_total:profitT,ship_total:shipT,memo,user_id:currentUserId};
       const[saved]=await sbInsert('orders',row);orders.push(saved);
     }
+    // 仕入れした商品をsort_order=0（先頭）にして他をずらす
+    const minOrder=Math.min(...products.map(x=>x.sort_order||0));
+    const newOrder=minOrder-1;
+    await sbUpdate('products',selProdId,{sort_order:newOrder});
+    const pi=products.findIndex(x=>x.id===selProdId);
+    if(pi>-1){products[pi].sort_order=newOrder;products.sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));}
     setSyncStatus('ok','登録完了');
     alert(`「${p.name}」を${qty}個、${dispDate(dateVal)}に登録しました`);
     document.getElementById('o-qty').value='1';document.getElementById('o-memo').value='';
     document.querySelectorAll('.psi').forEach(el=>el.classList.remove('selected'));
     selProdId=null;document.getElementById('sel-detail').style.display='none';
+    renderProdSelectList();
   }catch(e){setSyncStatus('err','登録失敗: '+e.message);alert('登録に失敗しました: '+e.message);}
   btn.disabled=false;}
 
@@ -793,12 +800,26 @@ function startEditMonOrder(id){editingMonOrderId=id;renderMonthDetail();}
 function cancelEditMonOrder(){editingMonOrderId=null;renderMonthDetail();}
 async function saveEditMonOrder(id){
   const o=orders.find(x=>x.id===id);if(!o)return;
-  const upd={qty:parseInt(document.getElementById('mo-qty').value)||1,cost_total:parseInt(document.getElementById('mo-cost').value)||0,profit_total:parseInt(document.getElementById('mo-profit').value)||0,ship_total:parseInt(document.getElementById('mo-ship').value)||0,memo:document.getElementById('mo-memo').value.trim()};
+  const qty=parseInt(document.getElementById('mo-qty').value)||1;
+  const cost_total=parseInt(document.getElementById('mo-cost').value)||0;
+  const profit_total=parseInt(document.getElementById('mo-profit').value)||0;
+  const ship_total=parseInt(document.getElementById('mo-ship').value)||0;
+  const memo=document.getElementById('mo-memo').value.trim();
+  const upd={qty,cost_total,profit_total,ship_total,memo};
   setSyncStatus('loading','更新中...');
   try{
     await sbUpdate('orders',id,upd);Object.assign(o,upd);
     editingMonOrderId=null;setSyncStatus('ok','更新完了');renderCalendar();renderMonthDetail();
   }catch(e){setSyncStatus('err','更新失敗: '+e.message);}}
+
+function recalcMonFromQty(){
+  const o=orders.find(x=>x.id===editingMonOrderId);if(!o)return;
+  const p=products.find(x=>x.id===o.product_id);if(!p)return;
+  const qty=parseInt(document.getElementById('mo-qty').value)||1;
+  document.getElementById('mo-cost').value=p.cost*qty;
+  document.getElementById('mo-profit').value=p.profit*qty;
+  document.getElementById('mo-ship').value=p.ship*qty;
+  recalcMonNet();}
 async function delOrderMon(id){
   if(!confirm('この仕入れ記録を削除しますか？'))return;
   setSyncStatus('loading','削除中...');
@@ -854,7 +875,7 @@ async function renderMonthDetail(){
       return`<div style="background:var(--bg3);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;border:1px solid var(--border2)">
         <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-weight:700">${mm}/${dd} · ${esc(p.name)}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">個数</div><input type="number" id="mo-qty" value="${o.qty}" min="1"></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">個数</div><input type="number" id="mo-qty" value="${o.qty}" min="1" oninput="recalcMonFromQty()"></div>
           <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">仕入れ計</div><input type="number" id="mo-cost" value="${t.c}" oninput="recalcMonRate()"></div>
           <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">利益計</div><input type="number" id="mo-profit" value="${t.pr}" oninput="recalcMonNet()"></div>
           <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">送料計</div><input type="number" id="mo-ship" value="${t.sh}" oninput="recalcMonRate()"></div>
