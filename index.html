@@ -335,17 +335,30 @@ let accessToken=SB_KEY,currentUserId=null;
 
 function getH(){return{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+accessToken};}
 
-async function sbGet(table,params=''){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{headers:{...getH(),'Prefer':'return=representation'}});
-  if(!r.ok)throw new Error(await r.text());return r.json();}
-async function sbInsert(table,data){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(data)});
-  if(!r.ok)throw new Error(await r.text());return r.json();}
-async function sbUpdate(table,id,data){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{method:'PATCH',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(data)});
-  if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbRequest(method, table, params='', data=null){
+  const doReq=async()=>{
+    const url=`${SB_URL}/rest/v1/${table}${params?'?'+params:''}`;
+    const opts={method,headers:{...getH(),'Prefer':'return=representation'}};
+    if(data)opts.body=JSON.stringify(data);
+    return fetch(url,opts);};
+  let r=await doReq();
+  if(r.status===401){
+    // トークン期限切れ→自動更新
+    const refreshed=await tryAutoLogin();
+    if(refreshed)r=await doReq();
+    else{doLogout();return null;}
+  }
+  if(!r.ok)throw new Error(await r.text());
+  if(method==='DELETE')return null;
+  return r.json();}
+
+async function sbGet(table,params=''){return sbRequest('GET',table,params);}
+async function sbInsert(table,data){return sbRequest('POST',table,'',data);}
+async function sbUpdate(table,id,data){return sbRequest('PATCH',table,'id=eq.'+id,data);}
 async function sbDelete(table,id){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{method:'DELETE',headers:getH()});
+  const url=`${SB_URL}/rest/v1/${table}?id=eq.${id}`;
+  let r=await fetch(url,{method:'DELETE',headers:getH()});
+  if(r.status===401){const refreshed=await tryAutoLogin();if(refreshed){r=await fetch(url,{method:'DELETE',headers:getH()});}else{doLogout();return;}}
   if(!r.ok)throw new Error(await r.text());}
 
 // ── Auth ──
