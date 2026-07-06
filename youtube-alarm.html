@@ -129,6 +129,13 @@
       </p>
     </div>
     <div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:var(--ink)">
+        <input type="checkbox" id="liveMode" style="width:20px;height:20px;accent-color:var(--dawn)">
+        ライブ配信を再生する（生放送チャンネル向け）
+      </label>
+      <p class="hint" style="margin-top:4px">チャンネルIDを入力した場合のみ有効。アラーム時刻に配信中のライブを直接再生します。</p>
+    </div>
+    <div>
       <label for="time">起きる時刻</label>
       <input type="time" id="time" value="07:00">
     </div>
@@ -214,7 +221,7 @@ function parseSource(input){
   input=(input||'').trim();
   let m;
   if(m=input.match(/list=([A-Za-z0-9_-]+)/)) return {type:'playlist',id:m[1]};
-  if(m=input.match(/(UC[A-Za-z0-9_-]{22})/)) return {type:'playlist',id:'UU'+m[1].slice(2)};
+  if(m=input.match(/(UC[A-Za-z0-9_-]{22})/)) return {type:'playlist',id:'UU'+m[1].slice(2),channel:m[1]};
   if(m=input.match(/(?:v=|youtu\.be\/|shorts\/|embed\/|live\/)([A-Za-z0-9_-]{11})/)) return {type:'video',id:m[1]};
   if(/^(UU|PL|OLAK5uy|RD)[A-Za-z0-9_-]+$/.test(input)) return {type:'playlist',id:input};
   if(/^[A-Za-z0-9_-]{11}$/.test(input)) return {type:'video',id:input};
@@ -233,19 +240,32 @@ function buildPlayer(src){
   if(!ytApiReady){ pendingSource=src; return; }
   pendingSource=null;
   if(player){ try{player.destroy();}catch(e){} player=null; }
+  // destroy()で#player要素が消えるため毎回作り直す
+  $('playerWrap').innerHTML='<div id="player"></div>';
   playerReady=false; unlocked=false;
-  const opts={
-    height:'315',width:'560',
-    playerVars:{playsinline:1,rel:0},
-    events:{
-      onReady:()=>{ playerReady=true; unlockAudio(); },
-      onStateChange:onPlayerState,
-      onError:()=>setStatus('動画を読み込めませんでした。IDやURLを確認してください。',false)
+  const events={
+    onReady:()=>{ playerReady=true; unlockAudio(); },
+    onStateChange:onPlayerState,
+    onError:(e)=>{
+      if(e.data===101||e.data===150){
+        setStatus('このチャンネルは埋め込み再生が禁止されています',false);
+      }else{
+        setStatus('動画を読み込めませんでした。IDやURLを確認してください。',false);
+      }
     }
   };
-  if(src.type==='video') opts.videoId=src.id;
-  else { opts.playerVars.listType='playlist'; opts.playerVars.list=src.id; }
-  player=new YT.Player('player',opts);
+  if(src.type==='live'){
+    // チャンネルの現在のライブ配信を直接埋め込む
+    const url='https://www.youtube.com/embed/live_stream?channel='+src.channel
+      +'&enablejsapi=1&playsinline=1&autoplay=1&mute=1&origin='+encodeURIComponent(location.origin);
+    $('playerWrap').innerHTML='<iframe id="player" src="'+url+'" allow="autoplay; encrypted-media" allowfullscreen frameborder="0"></iframe>';
+    player=new YT.Player('player',{events});
+  }else{
+    const opts={height:'315',width:'560',playerVars:{playsinline:1,rel:0},events};
+    if(src.type==='video') opts.videoId=src.id;
+    else { opts.playerVars.listType='playlist'; opts.playerVars.list=src.id; }
+    player=new YT.Player('player',opts);
+  }
   $('playerWrap').classList.add('show');
 }
 
@@ -282,7 +302,8 @@ $('armBtn').onclick=()=>{
   if(tgt<=now) tgt.setDate(tgt.getDate()+1);
   targetTs=tgt.getTime();
   armed=true; ringing=false;
-  localStorage.setItem('yt-alarm',JSON.stringify({src:$('src').value,time:t}));
+  if($('liveMode').checked && src.channel) src={type:'live',channel:src.channel};
+  localStorage.setItem('yt-alarm',JSON.stringify({src:$('src').value,time:t,live:$('liveMode').checked}));
   buildPlayer(src);
   requestWake();
   $('setupCard').style.display='none';
@@ -292,8 +313,9 @@ $('armBtn').onclick=()=>{
 
 $('disarmBtn').onclick=()=>reset();
 $('testBtn').onclick=()=>{
-  const src=parseSource($('src').value);
+  let src=parseSource($('src').value);
   if(!src||src.type==='handle'){ setStatus('先に有効なURLまたはIDを入力してください',false); return; }
+  if($('liveMode').checked && src.channel) src={type:'live',channel:src.channel};
   armed=true; ringing=false; targetTs=Date.now()+3000;
   buildPlayer(src);
   $('setupCard').style.display='none';
@@ -370,7 +392,7 @@ document.addEventListener('visibilitychange',()=>{
 // ---------- 前回設定の復元 ----------
 try{
   const saved=JSON.parse(localStorage.getItem('yt-alarm')||'null');
-  if(saved){ $('src').value=saved.src||''; if(saved.time) $('time').value=saved.time; }
+  if(saved){ $('src').value=saved.src||''; if(saved.time) $('time').value=saved.time; $('liveMode').checked=!!saved.live; }
 }catch(e){}
 </script>
 </body>
