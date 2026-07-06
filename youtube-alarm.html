@@ -155,7 +155,7 @@
   <div id="playerWrap"><div id="player"></div></div>
 
   <div id="ringPanel">
-    <button class="btn-main" id="forcePlayBtn" style="display:none;font-size:20px;padding:18px">タップして再生 ▶</button>
+    <button class="btn-main" id="forcePlayBtn" style="display:none;font-size:17px;padding:16px">再生されない時は動画の ▶ を直接タップ</button>
     <button class="btn-stop" id="stopBtn">停止</button>
     <button class="btn-ghost" id="snoozeBtn">スヌーズ（5分）</button>
   </div>
@@ -275,7 +275,7 @@ function unlockAudio(){
   // iOSなどで自動アンロックできなかった場合はタップを促す
   setTimeout(()=>{
     if(!unlocked && !ringing){
-      setStatus('▼ 下の動画の再生ボタンを一度タップしてください（音の準備）',false);
+      setStatus('▲ 上の動画の ▶ を直接タップしてください（音の準備。自動で止まります）',false);
     }
   },3000);
 }
@@ -284,6 +284,11 @@ function onPlayerState(e){
     unlocked=true;
     setTimeout(()=>{ if(!ringing){ try{player.pauseVideo();}catch(_){} } },800);
     setStatus('準備OK。時間になったら再生します',true);
+  }
+  // アラーム中に動画を直接タップして再生した場合、ミュートを解除して音を出す
+  if(e.data===YT.PlayerState.PLAYING && ringing){
+    try{ player.unMute(); if(player.getVolume()<60) player.setVolume(60); }catch(_){}
+    $('forcePlayBtn').style.display='none';
   }
 }
 
@@ -316,11 +321,11 @@ $('testBtn').onclick=()=>{
   let src=parseSource($('src').value);
   if(!src||src.type==='handle'){ setStatus('先に有効なURLまたはIDを入力してください',false); return; }
   if($('liveMode').checked && src.channel) src={type:'live',channel:src.channel};
-  armed=true; ringing=false; targetTs=Date.now()+3000;
+  armed=true; ringing=false; targetTs=Date.now()+10000;
   buildPlayer(src);
   $('setupCard').style.display='none';
   $('armedCard').style.display='flex';
-  setStatus('3秒後にテスト再生します…',true);
+  setStatus('10秒後にテスト再生。案内が出たら動画の▶をタップ',true);
 };
 
 function startRinging(){
