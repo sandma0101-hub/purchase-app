@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>YouTube目覚まし</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sky-top:#0b1026;
+    --sky-bottom:#1a2142;
+    --ink:#f2edde;
+    --ink-dim:rgba(242,237,222,.55);
+    --card:rgba(255,255,255,.06);
+    --card-line:rgba(255,255,255,.14);
+    --dawn:#ffb27a;
+    --dawn-deep:#ff7e5f;
+    --ok:#8fd6a4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Zen Kaku Gothic New",sans-serif;
+    color:var(--ink);
+    background:linear-gradient(180deg,var(--sky-top) 0%,var(--sky-bottom) 100%);
+    transition:background 2s linear;
+    min-height:100dvh;
+    display:flex;flex-direction:column;align-items:center;
+    padding:20px 16px 40px;
+    overflow-x:hidden;
+    position:relative;
+  }
+  /* 星空 */
+  .stars{position:fixed;inset:0;pointer-events:none;z-index:0;transition:opacity 3s}
+  .stars i{position:absolute;width:2px;height:2px;border-radius:50%;background:#fff;opacity:.7;animation:tw 3s infinite}
+  @keyframes tw{0%,100%{opacity:.15}50%{opacity:.8}}
+  /* 太陽 */
+  #sun{
+    position:fixed;left:50%;bottom:-140px;transform:translateX(-50%);
+    width:120px;height:120px;border-radius:50%;
+    background:radial-gradient(circle,#ffe3b0 0%,var(--dawn) 55%,var(--dawn-deep) 100%);
+    box-shadow:0 0 80px 30px rgba(255,178,122,.35);
+    transition:bottom 2s linear,opacity 2s;
+    opacity:0;pointer-events:none;z-index:0;
+  }
+  main{position:relative;z-index:1;width:100%;max-width:560px;display:flex;flex-direction:column;align-items:center;gap:22px}
+
+  .eyebrow{font-size:12px;letter-spacing:.35em;color:var(--ink-dim);text-transform:uppercase}
+
+  #clock{
+    font-family:"DotGothic16",monospace;
+    font-size:clamp(64px,20vw,110px);
+    line-height:1;letter-spacing:.02em;
+    text-shadow:0 0 24px rgba(242,237,222,.18);
+  }
+  #clock small{font-size:.38em;color:var(--ink-dim)}
+  #date{font-size:14px;color:var(--ink-dim);margin-top:-12px}
+
+  #status{
+    font-family:"DotGothic16",monospace;
+    font-size:16px;min-height:24px;text-align:center;color:var(--dawn);
+  }
+  #status.ok{color:var(--ok)}
+
+  .card{
+    width:100%;background:var(--card);border:1px solid var(--card-line);
+    border-radius:16px;padding:20px;backdrop-filter:blur(6px);
+    display:flex;flex-direction:column;gap:14px;
+  }
+  label{font-size:13px;color:var(--ink-dim);display:block;margin-bottom:6px}
+  input[type=text],input[type=time]{
+    width:100%;padding:12px 14px;border-radius:10px;
+    border:1px solid var(--card-line);background:rgba(0,0,0,.25);
+    color:var(--ink);font-size:16px;font-family:inherit;
+  }
+  input[type=time]{font-family:"DotGothic16",monospace;font-size:22px;text-align:center;color-scheme:dark}
+  input:focus{outline:2px solid var(--dawn);outline-offset:1px}
+  .hint{font-size:12px;color:var(--ink-dim);line-height:1.7}
+
+  button{
+    padding:14px;border:none;border-radius:12px;
+    font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;
+    transition:transform .1s,opacity .2s;
+  }
+  button:active{transform:scale(.97)}
+  .btn-main{background:linear-gradient(135deg,var(--dawn),var(--dawn-deep));color:#3a1c0e}
+  .btn-ghost{background:transparent;border:1px solid var(--card-line);color:var(--ink)}
+  .btn-stop{background:#fff;color:#111;font-size:20px;padding:18px}
+  .row{display:flex;gap:10px}
+  .row>button{flex:1}
+  button:disabled{opacity:.4;cursor:default}
+
+  #playerWrap{
+    width:100%;max-width:560px;border-radius:16px;overflow:hidden;
+    border:1px solid var(--card-line);
+    aspect-ratio:16/9;background:#000;display:none;
+  }
+  #playerWrap.show{display:block}
+  #playerWrap iframe{width:100%;height:100%;display:block}
+
+  #ringPanel{display:none;width:100%;flex-direction:column;gap:10px}
+  #ringPanel.show{display:flex}
+
+  footer{margin-top:auto;padding-top:26px;font-size:11px;color:var(--ink-dim);text-align:center;line-height:1.8;position:relative;z-index:1;max-width:560px}
+  @media (prefers-reduced-motion:reduce){.stars i{animation:none}}
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+<div id="sun"></div>
+
+<main>
+  <div class="eyebrow">YOUTUBE ALARM</div>
+  <div>
+    <div id="clock">--:--<small>:--</small></div>
+    <div id="date" style="text-align:center"></div>
+  </div>
+  <div id="status"></div>
+
+  <div class="card" id="setupCard">
+    <div>
+      <label for="src">再生するチャンネル / 再生リスト / 動画</label>
+      <input type="text" id="src" placeholder="チャンネルID（UC…）またはURLを貼り付け" autocomplete="off">
+      <p class="hint" style="margin-top:6px">
+        チャンネルIDを入れると<strong>最新の動画から</strong>再生されます。
+        YouTubeアプリでチャンネルを開き「共有 → チャンネルIDをコピー」で取得できます。
+        再生リストや動画のURLもOK。
+      </p>
+    </div>
+    <div>
+      <label for="time">起きる時刻</label>
+      <input type="time" id="time" value="07:00">
+    </div>
+    <button class="btn-main" id="armBtn">アラームをセット</button>
+    <button class="btn-ghost" id="testBtn">テスト再生（音が出るか確認）</button>
+  </div>
+
+  <div class="card" id="armedCard" style="display:none">
+    <div id="countdown" style="font-family:'DotGothic16',monospace;font-size:20px;text-align:center"></div>
+    <p class="hint" style="text-align:center">
+      画面はこのままオンに保たれます。<br>
+      タブを閉じたり他のアプリに切り替えたりしないでください。
+    </p>
+    <button class="btn-ghost" id="disarmBtn">アラームを解除</button>
+  </div>
+
+  <div id="playerWrap"><div id="player"></div></div>
+
+  <div id="ringPanel">
+    <button class="btn-stop" id="stopBtn">停止</button>
+    <button class="btn-ghost" id="snoozeBtn">スヌーズ（5分）</button>
+  </div>
+</main>
+
+<footer>
+  ブラウザの仕様上、ページを開いたままにしておく必要があります。<br>
+  充電しながら枕元に置くのがおすすめです。iPhoneはサイレントスイッチがONでも音が鳴ります。
+</footer>
+
+<script>
+// ---------- 状態 ----------
+let player=null, playerReady=false, unlocked=false;
+let armed=false, ringing=false, targetTs=0;
+let fadeTimer=null, wakeLock=null;
+const $=id=>document.getElementById(id);
+
+// ---------- 星空生成 ----------
+(()=>{const s=$('stars');for(let i=0;i<70;i++){const d=document.createElement('i');
+d.style.left=Math.random()*100+'%';d.style.top=Math.random()*100+'%';
+d.style.animationDelay=(Math.random()*3)+'s';d.style.transform=`scale(${.5+Math.random()*1.5})`;
+s.appendChild(d);}})();
+
+// ---------- 時計 ----------
+function tick(){
+  const n=new Date();
+  const p=x=>String(x).padStart(2,'0');
+  $('clock').innerHTML=`${p(n.getHours())}:${p(n.getMinutes())}<small>:${p(n.getSeconds())}</small>`;
+  $('date').textContent=`${n.getMonth()+1}月${n.getDate()}日（${'日月火水木金土'[n.getDay()]}）`;
+  if(armed&&!ringing){
+    const rest=targetTs-n.getTime();
+    if(rest<=0){ startRinging(); }
+    else{
+      const h=Math.floor(rest/3600000),m=Math.floor(rest%3600000/60000),sec=Math.floor(rest%60000/1000);
+      $('countdown').textContent=`あと ${h>0?h+'時間':''}${m}分${sec}秒`;
+      updateSky(rest);
+    }
+  }
+}
+setInterval(tick,250); tick();
+
+// ---------- 空のグラデーション（夜明け演出） ----------
+const NIGHT={top:[11,16,38],bot:[26,33,66]};
+const DAWN={top:[63,60,120],bot:[255,150,100]};
+function lerp(a,b,t){return a.map((v,i)=>Math.round(v+(b[i]-v)*t));}
+function updateSky(rest){
+  const WINDOW=30*60*1000; // 30分前から夜明け開始
+  let t=rest>=WINDOW?0:1-rest/WINDOW;
+  applySky(t);
+}
+function applySky(t){
+  const top=lerp(NIGHT.top,DAWN.top,t),bot=lerp(NIGHT.bot,DAWN.bot,t);
+  document.body.style.setProperty('--sky-top',`rgb(${top})`);
+  document.body.style.setProperty('--sky-bottom',`rgb(${bot})`);
+  $('stars').style.opacity=1-t;
+  const sun=$('sun');
+  sun.style.opacity=t>0.05?Math.min(1,t*1.5):0;
+  sun.style.bottom=(-140+t*220)+'px';
+}
+
+// ---------- 入力の解析 ----------
+function parseSource(input){
+  input=(input||'').trim();
+  let m;
+  if(m=input.match(/list=([A-Za-z0-9_-]+)/)) return {type:'playlist',id:m[1]};
+  if(m=input.match(/(UC[A-Za-z0-9_-]{22})/)) return {type:'playlist',id:'UU'+m[1].slice(2)};
+  if(m=input.match(/(?:v=|youtu\.be\/|shorts\/|embed\/|live\/)([A-Za-z0-9_-]{11})/)) return {type:'video',id:m[1]};
+  if(/^(UU|PL|OLAK5uy|RD)[A-Za-z0-9_-]+$/.test(input)) return {type:'playlist',id:input};
+  if(/^[A-Za-z0-9_-]{11}$/.test(input)) return {type:'video',id:input};
+  if(/@[A-Za-z0-9._-]+/.test(input)) return {type:'handle'};
+  return null;
+}
+
+// ---------- YouTubeプレーヤー ----------
+const tag=document.createElement('script');
+tag.src='https://www.youtube.com/iframe_api';
+document.head.appendChild(tag);
+let ytApiReady=false, pendingSource=null;
+window.onYouTubeIframeAPIReady=()=>{ ytApiReady=true; if(pendingSource) buildPlayer(pendingSource); };
+
+function buildPlayer(src){
+  if(!ytApiReady){ pendingSource=src; return; }
+  pendingSource=null;
+  if(player){ try{player.destroy();}catch(e){} player=null; }
+  playerReady=false; unlocked=false;
+  const opts={
+    height:'315',width:'560',
+    playerVars:{playsinline:1,rel:0},
+    events:{
+      onReady:()=>{ playerReady=true; unlockAudio(); },
+      onStateChange:onPlayerState,
+      onError:()=>setStatus('動画を読み込めませんでした。IDやURLを確認してください。',false)
+    }
+  };
+  if(src.type==='video') opts.videoId=src.id;
+  else { opts.playerVars.listType='playlist'; opts.playerVars.list=src.id; }
+  player=new YT.Player('player',opts);
+  $('playerWrap').classList.add('show');
+}
+
+// ユーザー操作直後にミュート再生→一時停止して、後の自動再生を解除する
+function unlockAudio(){
+  try{ player.mute(); player.playVideo(); }catch(e){}
+}
+function onPlayerState(e){
+  if(e.data===YT.PlayerState.PLAYING && !ringing && !unlocked){
+    unlocked=true;
+    setTimeout(()=>{ if(!ringing){ try{player.pauseVideo();}catch(_){} } },800);
+    setStatus('準備OK。時間になったら再生します',true);
+  }
+}
+
+// ---------- アラーム ----------
+function setStatus(msg,ok){ const s=$('status'); s.textContent=msg; s.className=ok?'ok':''; }
+
+$('armBtn').onclick=()=>{
+  const src=parseSource($('src').value);
+  if(!src){ setStatus('URLまたはIDを入力してください',false); return; }
+  if(src.type==='handle'){ setStatus('@ハンドルは使えません。チャンネルID（UC…）を貼ってください',false); return; }
+  const t=$('time').value;
+  if(!t){ setStatus('時刻を設定してください',false); return; }
+  const [h,m]=t.split(':').map(Number);
+  const now=new Date(), tgt=new Date();
+  tgt.setHours(h,m,0,0);
+  if(tgt<=now) tgt.setDate(tgt.getDate()+1);
+  targetTs=tgt.getTime();
+  armed=true; ringing=false;
+  localStorage.setItem('yt-alarm',JSON.stringify({src:$('src').value,time:t}));
+  buildPlayer(src);
+  requestWake();
+  $('setupCard').style.display='none';
+  $('armedCard').style.display='flex';
+  setStatus('音声の準備をしています…',true);
+};
+
+$('disarmBtn').onclick=()=>reset();
+$('testBtn').onclick=()=>{
+  const src=parseSource($('src').value);
+  if(!src||src.type==='handle'){ setStatus('先に有効なURLまたはIDを入力してください',false); return; }
+  armed=true; ringing=false; targetTs=Date.now()+3000;
+  buildPlayer(src);
+  $('setupCard').style.display='none';
+  $('armedCard').style.display='flex';
+  setStatus('3秒後にテスト再生します…',true);
+};
+
+function startRinging(){
+  ringing=true;
+  $('armedCard').style.display='none';
+  $('ringPanel').classList.add('show');
+  applySky(1);
+  setStatus('おはようございます！',true);
+  try{
+    player.unMute();
+    player.setVolume(15);
+    if(player.getPlaylist&&player.getPlaylist()) player.playVideoAt(0);
+    else player.playVideo();
+    // 30秒かけて音量フェードイン
+    let v=15;
+    fadeTimer=setInterval(()=>{ v=Math.min(100,v+5); player.setVolume(v); if(v>=100)clearInterval(fadeTimer); },1800);
+  }catch(e){}
+  if(navigator.vibrate) navigator.vibrate([300,150,300,150,300]);
+}
+
+$('stopBtn').onclick=()=>{ try{player.pauseVideo();}catch(e){} reset(); };
+$('snoozeBtn').onclick=()=>{
+  try{player.pauseVideo();player.mute();}catch(e){}
+  clearInterval(fadeTimer);
+  ringing=false; armed=true; unlocked=true;
+  targetTs=Date.now()+5*60*1000;
+  $('ringPanel').classList.remove('show');
+  $('armedCard').style.display='flex';
+  setStatus('5分後にもう一度鳴ります',true);
+};
+
+function reset(){
+  armed=false; ringing=false;
+  clearInterval(fadeTimer);
+  $('ringPanel').classList.remove('show');
+  $('armedCard').style.display='none';
+  $('setupCard').style.display='flex';
+  $('playerWrap').classList.remove('show');
+  if(player){ try{player.destroy();}catch(e){} player=null; }
+  applySky(0);
+  setStatus('');
+  releaseWake();
+}
+
+// ---------- 画面スリープ防止 ----------
+async function requestWake(){
+  try{
+    wakeLock=await navigator.wakeLock.request('screen');
+  }catch(e){ setStatus('画面ロック防止が使えません。手動で画面をオンのままにしてください',false); }
+}
+function releaseWake(){ if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; } }
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&armed) requestWake();
+});
+
+// ---------- 前回設定の復元 ----------
+try{
+  const saved=JSON.parse(localStorage.getItem('yt-alarm')||'null');
+  if(saved){ $('src').value=saved.src||''; if(saved.time) $('time').value=saved.time; }
+}catch(e){}
+</script>
+</body>
+</html>
