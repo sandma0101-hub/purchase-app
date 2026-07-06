@@ -148,6 +148,7 @@
   <div id="playerWrap"><div id="player"></div></div>
 
   <div id="ringPanel">
+    <button class="btn-main" id="forcePlayBtn" style="display:none;font-size:20px;padding:18px">タップして再生 ▶</button>
     <button class="btn-stop" id="stopBtn">停止</button>
     <button class="btn-ghost" id="snoozeBtn">スヌーズ（5分）</button>
   </div>
@@ -251,6 +252,12 @@ function buildPlayer(src){
 // ユーザー操作直後にミュート再生→一時停止して、後の自動再生を解除する
 function unlockAudio(){
   try{ player.mute(); player.playVideo(); }catch(e){}
+  // iOSなどで自動アンロックできなかった場合はタップを促す
+  setTimeout(()=>{
+    if(!unlocked && !ringing){
+      setStatus('▼ 下の動画の再生ボタンを一度タップしてください（音の準備）',false);
+    }
+  },3000);
 }
 function onPlayerState(e){
   if(e.data===YT.PlayerState.PLAYING && !ringing && !unlocked){
@@ -310,7 +317,19 @@ function startRinging(){
     fadeTimer=setInterval(()=>{ v=Math.min(100,v+5); player.setVolume(v); if(v>=100)clearInterval(fadeTimer); },1800);
   }catch(e){}
   if(navigator.vibrate) navigator.vibrate([300,150,300,150,300]);
+  // 2秒経っても再生が始まらない場合はタップボタンを表示
+  setTimeout(()=>{
+    try{
+      if(ringing && player.getPlayerState()!==YT.PlayerState.PLAYING){
+        $('forcePlayBtn').style.display='block';
+      }
+    }catch(e){ $('forcePlayBtn').style.display='block'; }
+  },2000);
 }
+$('forcePlayBtn').onclick=()=>{
+  try{ player.unMute(); player.setVolume(60); player.playVideo(); }catch(e){}
+  $('forcePlayBtn').style.display='none';
+};
 
 $('stopBtn').onclick=()=>{ try{player.pauseVideo();}catch(e){} reset(); };
 $('snoozeBtn').onclick=()=>{
@@ -326,6 +345,7 @@ $('snoozeBtn').onclick=()=>{
 function reset(){
   armed=false; ringing=false;
   clearInterval(fadeTimer);
+  $('forcePlayBtn').style.display='none';
   $('ringPanel').classList.remove('show');
   $('armedCard').style.display='none';
   $('setupCard').style.display='flex';
